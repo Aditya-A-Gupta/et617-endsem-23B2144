@@ -1,4 +1,6 @@
 # et617-endsem-23B2144
+# DESIGN.md - ET617 End-Sem
+
 ## 0. Identity card
 - Roll no: **23B2144**
 - Card: **P5** Inquiry-based virtual laboratory · **T1** Simple pendulum: length, mass, amplitude vs period (Cl. 9–11) · **L6** High-achieving Olympiad learner, bored by routine practice · **C4** 10-minute sessions
@@ -101,12 +103,15 @@ Other failures handled the same way: timing a single swing (prompt: "How can you
 6. **Session summary:** outcomes achieved, misconceptions addressed, "Save and continue later".
 7. **About:** identity card, tools used, AI disclosure.
 
-## 9. AI features (D6 preview)
-| Feature | Input | Output | Check | Fallback |
+## 9. Feedback and AI functionality (D6 preview)
+**No API keys are used (not permitted).** The app makes no external calls. All feedback runs in the browser as rule-based logic, and is labelled "Rule-based feedback" on screen.
+
+| Feature | Input | Output | Check | If it fails or is wrong |
 |---|---|---|---|---|
-| **Explanation evaluator** (Task 5) | Learner's text + rubric (correct idea: small-angle approximation) | JSON `{label: correct/partial/M1/M2/other, feedback}` | JSON schema validation; feedback must not contain the final numeric answer | Keyword rubric matching + prewritten feedback |
-| **Failed-experiment coach** | Trial table (which variables changed) | A guiding question (≤ 25 words) | Must be a question, must not state the physics result | Rule-based: "You changed N things; which one…?" |
-- Keys live in Vercel environment variables. Fallback uses clearly labelled recorded sample outputs.
+| **Explanation evaluator** (Task 5) | Learner's text | `{label: correct/partial/other, feedback}` from keyword rules for the small-angle idea | Fixed label set; prewritten feedback that asks a guiding question for partial/other | The "other" label asks the learner to re-read their two trials |
+| **Failed-experiment coach** | Which variables changed between two trials | A guiding question naming the changed variables | Fires only when 2 or more variables changed; never states the physics result | Offers a locked re-run changing one variable |
+
+AI tools (an LLM chat assistant) were used at design time to help draft the content, misconceptions and feedback text. Every such chat is listed in the report's AI-use log.
 
 ## 10. Two scenarios (D5)
 - **(a) Correct learner:** Task 1 correct → Step 2 skipped/shortened → predicts ×2 for 4× length → unlocks the large-amplitude extension.
@@ -122,5 +127,4 @@ Other failures handled the same way: timing a single swing (prompt: "How can you
 
 ## 12. Process plan
 - DESIGN.md committed by 0:30 · first deploy by 1:00 · commit every ≤ 30 min.
-- Tools: Next.js or plain HTML/JS (state in report), Vercel, an LLM API via serverless route. No course-project code reused.
-
+- Tools: plain HTML/CSS/JS (no framework, no build step), hosted on Vercel, no external APIs. No course-project code reused.
