@@ -1,0 +1,392 @@
+What do you think the website should look like
+
+Design is assessed, not polish, so I’d make it clean and functional. The look should serve the rubric (cognitive engagement, intuitive interface, problem-solving tools) and the persona (a bored Olympiad learner, 10 minutes, phone or laptop).
+
+Overall feel
+Style: “Physics notebook meets lab instrument.” It’s dark or off-white with one accent colour for key points, which suits an Olympiad student better than a childish look.
+Type: One clean sans-serif for text and a monospace face for numbers and readouts such as T = 2.01 s. Show equations as real math.
+Tone: Conversational and challenge-driven (“Let’s break the rule”). It should feel like a puzzle rather than a worksheet.
+Cues: Key points sit in boxed callouts. Variables you can change use consistent control styles. The same button style always means the same action.
+Layout on every screen
+Top bar: App name, a progress bar (“Step 3 of 5, about 6 min left”) and a Save & pause button (this is C4, so it has to be visible).
+Main area: One task at a time, with no clutter.
+Footer: Roll no. 23B2144, on every screen as required.
+The lab bench (the main screen)
+
+This is where learners spend most of their time, so it deserves the most care.
+
+Left or top: An animated pendulum on a canvas. It has a ruler marking the length, an angle arc for amplitude, and a bob whose size reflects mass.
+Controls: Three sliders (length, mass, amplitude) with live values, a Release button, and a stopwatch with a “time 10 swings” mode.
+Bottom: A results table that fills in each trial. A “what changed since last trial” tracker highlights changed variables in the accent colour. It is also what drives the failed-experiment coaching.
+Hypothesis box: A short text field above the controls (“I think … because …”). The learner marks it supported / not supported afterwards.
+On a phone, stack it in this order: pendulum, controls, table, so everything is within thumb reach.
+The other screens
+Welcome: One big Start or Resume button (“You were at Step 3 of 5”).
+Diagnostic: A single question with large answer buttons.
+Graph screen: Two charts side by side (T vs L, curved; T² vs L, straight) with a toggle and a line-fit slope readout.
+Explain and extend: A text box, an AI feedback card in a visibly different style, and a “labelled sample feedback” tag when the fallback is used.
+Summary: Three outcome checkmarks, “misconceptions you busted”, and a resume or restart button.
+About: Identity card, AI disclosure, tools used.
+Things I’d avoid
+Heavy animations, mascots, gamified badges, and anything hover-only.
+Large images or media (keep it light and fast).
+
+I can show a quick mockup of the lab bench screen before we build, or go straight to building the app. Which would you prefer?
+
+What would the flow of the app be like
+
+The flow is a single path of five steps, with branches where the learner’s answers decide what happens next.
+
+Main flow
+Welcome ─► Step 1: Diagnostic ─┬─► (correct + confident) ─► Challenge path ─┐
+                               └─► (M1 or unsure) ─► Step 2: Mass lab ──────┤
+                                                                            ▼
+                               Step 3: Length lab ─► Graph analysis ─► Step 4: Amplitude ─► Step 5: Extension ─► Summary
+Step by step
+
+Welcome
+
+New learner: Start. Returning learner: “Resume at Step 3?”
+The time estimate (about 10 min) is shown up front.
+
+Step 1: Diagnostic (about 1 min)
+
+Task 1: “Which bob has the shorter period, 1 kg or 3 kg?”
+Correct → confirm briefly and offer the Challenge path (skips the guided mass lab).
+Wrong (M1) → feedback: “Many people expect that, so let’s test it.” → Step 2.
+
+Step 2: Mass lab (about 2 min, guided)
+
+Learner writes a hypothesis, runs 3 masses and times 10 swings each.
+Results show equal periods → learner marks the hypothesis supported or not, and revises it.
+Task 1 is re-asked in a new form to check the revision.
+
+Step 3: Length lab (about 3 min)
+
+Task 3: predict T for L = 4 m, then run it.
+Predicts 4.0 s → right, move on.
+Predicts 8 s (M2) → the result shows 4.0 s → prompt: “What does that say about T ∝ L?” → plot T² vs L.
+
+Graph analysis
+
+Task 4: learner picks which graph is a straight line and reads the slope (≈ 4π²/g).
+Wrong graph → short prompt, then retry.
+
+Step 4: Amplitude (about 2 min)
+
+Learner runs 5° and 60° and compares. Task 5: explain the difference.
+The AI evaluator returns correct, partial or other, with feedback.
+
+Step 5: Olympiad extension (about 2 min)
+
+“A clock runs slow: what do you change, and by how much?”
+Reached via the Challenge path or after completing Steps 2–4.
+
+Summary
+
+Shows which outcomes were met and which misconceptions came up and got resolved, then Done or Save for later.
+Cross-cutting behaviours (apply at any step)
+Failed experiment: if two variables change between trials, the confound is flagged, a guiding question appears, and a locked-variable re-run is offered.
+Hints: 3 hint requests on one task → a simpler worked example.
+Two correct in a row: unlocks the harder large-amplitude variant.
+Save and pause: state is written to localStorage after every action, so the learner can stop at any screen and resume exactly there.
+AI failure: falls back to rule-based feedback, with a visible “sample feedback” label.
+The two scenarios the viva will ask you to walk through
+Correct path: Welcome → Diagnostic ✓ → Challenge path → Length lab → Graph → Amplitude → Extension → Summary.
+Misconception path: Welcome → Diagnostic ✗ (M1) → Mass lab → hypothesis revised → Length lab (M2 slip, then T² graph fix) → … → Summary.
+
+I can draw this as a visual diagram, or start building the app along these lines. Which do you want?
+
+Ok cool. What're next steps after creating the Design.md?
+
+Here is the order I’d do things in. The times come from the exam timeline.
+
+When	Step	Notes
+By 0:10	Declare your card in the Moodle Excel sheet	Do this first if you haven’t. It’s required within the first 10 minutes.
+By 0:30	Create the GitHub repo et617-endsem-23b2144 and commit DESIGN.md	This is the checkpoint. Create the repo after the exam starts, and keep the commit history. Don’t commit API keys.
+0:30–1:00	Build the app skeleton and deploy it	A first deployment is required by 1:00. Make a Vercel project from the repo at et617-23b2144.vercel.app, and put the footer with your roll number and the About screen in early.
+1:00–1:30	Build the real content	The lab bench with the simulation, Tasks 1–5 with their feedback, the misconception branching, pause and resume, and the two AI features with their fallbacks.
+Every 30 min	Commit	The exam says a single big commit at the end will be reviewed.
+~1:20–1:30	Run both scenarios on the live app	Take screenshots of the correct path and the M1 path. The report needs them for D5.
+1:35–1:55	Write the report	Headings in order: Identity card · D1 · D2 · D3 · D4 (URL, screen map) · D5 · D6 · D7 · D8 · AI-use log and reflection. Most of D1, D2, D3, D6 and D8 can be adapted from DESIGN.md.
+1:55–2:00	Submit on Moodle	The checklist has five items: the live URL, the GitHub link, the report as a single PDF, the AI chat links or exports, and a screenshot of your exam card.
+2:00–3:00	Viva	See below.
+Things to watch
+API keys: keep them in Vercel environment variables, never in the repo.
+AI-use log: save a share link for every AI chat as you go, because undisclosed AI use is treated as a breach.
+Frozen repo: after submission, the repo is frozen. Any viva changes go on a separate viva branch.
+Whole app first: get a working app with all 5 or more connected screens before polishing anything. Design is graded, not polish.
+Preparing for the viva
+Walkthrough: the correct path and the misconception path, live.
+Live change request: the examiner asks for a small change. Keep the code simple enough to change quickly, such as variables in one config object and feedback text in one file.
+Why question: be ready to explain one design decision tied to Meera’s persona or the 10-minute constraint.
+What I’d suggest doing now
+
+Build the app. I’d start with the skeleton, meaning the screen routing, the footer, the About screen and localStorage save/resume. After that comes the pendulum simulation, then the tasks and feedback, then the AI features. Tell me when you want to begin, and whether you prefer plain HTML/JS or something like Next.js.
+
+Ok. So now, give me the code for intital deployment from 0;30-1:00. I'll submit it and then we can move forward
+
+I’ll build a static site with plain HTML, CSS and JS. It needs no build step and deploys straight to Vercel. This first version has the screen routing, the roll-number footer, the About screen, save and resume, and a working diagnostic with M1 branching. The other screens are placeholders that we’ll fill in next.
+
+The pause and resume logic I just wrote is wrong. Pausing overwrites the screen, so Resume would land on the wrong step. I’m fixing that now.
+
+Now a quick check in the browser.
+
+The file view is a static snapshot that doesn’t load app.js. I’ll serve it locally instead.
+
+The skeleton passes a scripted click-through in the browser: start, the M1 branch, pause and resume, the About screen, and the footer. Stopping the local server now.
+
+I built the first deployable version. It’s in your project folder as index.html, styles.css and app.js, plus a .gitignore that keeps .env and .vercel out of the repo.
+
+What it does so far
+
+Screens: Welcome, Diagnostic, five placeholder steps (mass, length, graph, amplitude, extension), Summary and About.
+Roll number: 23B2144 shows in the footer of every screen and on the About screen.
+Diagnostic (Task 1): the correct answer gets the “challenge path” feedback. A wrong answer is logged as M1 and gets the “let’s test it” feedback.
+C4 constraint: a progress bar with “Step N of 7 · about X min left”, and a Save & pause button with a Resume option. Progress is stored in localStorage.
+Testing: I checked it in the browser with a scripted click-through of start, the M1 branch, pause and resume, About and the footer. It worked, and I haven’t looked at it on a phone-sized screen.
+
+What you do now
+
+Create the repo (the name is lowercase, so I’m assuming that’s what the exam expects).
+git init
+git add .
+git commit -m "Initial skeleton: screens, save/resume, diagnostic"
+git branch -M main
+git remote add origin https://github.com/<your-username>/et617-endsem-23b2144.git
+git push -u origin main
+Deploy on Vercel: import the repo and keep the defaults, since it’s a static site with no build command and no output directory. Then set the project name or domain to et617-23b2144.
+Open the live URL and check the footer shows your roll number.
+
+Note that DESIGN.md is in the same folder, so git add . will include it. Tell me when it’s live and I’ll build the pendulum simulation and the lab next.
+
+I was thinking of manually uploading the files in my github and then updating the website
+
+That works fine. Vercel redeploys on every push to the repo, so uploading through the browser is the same as pushing from the command line.
+
+Steps
+
+On GitHub, create a new repo named et617-endsem-23b2144. Leave “Add a README” unchecked, so the repo starts empty.
+Open the repo and choose Add file → Upload files.
+Drag in these files from your project folder:
+DESIGN.md
+index.html
+styles.css
+app.js
+.gitignore
+Commit them to main with a message like “Initial skeleton”.
+On Vercel, choose Add New → Project, import the repo, and keep the defaults. Set the project name to et617-23b2144 so the URL comes out right.
+
+Things to watch
+
+Upload .gitignore too. Hidden files can be left out of a drag and drop. If it doesn’t appear in the upload list, use Add file → Create new file, name it .gitignore, and paste in the three lines.
+Upload the files, not the folder. If you drag the whole folder in, the files land inside a subfolder and Vercel won’t find index.html at the root. After uploading, the repo root should show index.html directly.
+Commit often. The exam says there should be a commit at least every 30 minutes and warns that one big upload at the end will be reviewed. Each web upload counts as a commit, so upload after each chunk of work.
+DESIGN.md timing. It has to be committed by 0:30, so upload it with this first batch.
+
+If the build fails on Vercel, or the page comes up blank, tell me what the error says and I’ll fix it.
+
+Cool. Now, update the content for task during 1:00-1:30
+
+I’ll replace the placeholders with the full learning activity: the pendulum simulation, Tasks 2 to 5, the Olympiad extension, hints, adaptivity, and the AI features with their fallbacks.
+
+I spotted a few bugs in my own code: the layout resets after every trial, the length step needs a 9 m string the slider doesn’t have, and some feedback text is garbled. I’m fixing those now.
+
+Now the serverless AI function and the extra styles.
+
+The syntax checks pass. Next I’ll test the real flows in the browser, with both the misconception path and the correct path.
+
+The denial applied to restarting the local test server. The page opened anyway, so I’ll check whether it’s served and run the flow from there.
+
+The misconception path works, but the amplitude step’s “fair re-run” lock unlocked mass when it should have left amplitude free. I’m fixing that and then testing the correct path.
+
+Both paths work. One quick visual check at phone width, since the lab is the key screen.
+
+No horizontal overflow at 375 px. I’ll reset the viewport and wrap up.
+
+The full learning activity is built. A scripted click-through passed on both the misconception path and the correct path, with no console errors, and I checked the layout at phone width. Nothing is committed or deployed yet. I couldn’t test the real AI call because there’s no API key set. I also couldn’t restart the local test server near the end, though the existing one was still serving the page.
+
+What’s in the app now
+Pendulum simulation: sliders for length, mass and amplitude, plus a “Release & time 10 swings” button. The period is computed with the exact large-angle formula, so 60° really gives about 7% longer. Timing noise of ±1% is added, so periods are close but never identical.
+Results table: cells that changed since the previous trial are highlighted.
+Step 2, mass (Task 2): a hypothesis choice, three trials, and a fair-test check. If L or θ varied between trials, the app says it’s not a fair test. Once the data is fair, the learner revises their hypothesis.
+Step 3, length (Task 3): predict, then run the lab. A prediction of 8 s for L = 4 m triggers the M2 feedback.
+Graph (Task 4): T vs L and T² vs L side by side, then finding g from the slope.
+Amplitude (Task 5): compare a small and a large angle, then write an explanation that gets AI feedback.
+Olympiad extension and summary: the summary lists the outcomes met and the misconceptions that came up.
+How it covers the design requirements
+Failed experiment (P5 challenge): changing two variables between trials flags the confound and asks a guiding question. It never states the answer, and offers a locked re-run changing only the step’s variable.
+Adaptivity:
+A correct diagnostic skips the mass step.
+The challenge path, or two correct answers in a row, unlocks harder variants: predicting T when length is quartered, and a Moon-clock question.
+Three hint requests in a row show a worked example.
+AI features (api/ai.js, key read from ANTHROPIC_API_KEY):
+The explanation evaluator and the failed-experiment coach each validate the model’s output.
+If the AI call fails, rule-based feedback appears with a visible “Sample feedback (AI unavailable)” label.
+Before you upload
+Upload the new api folder with api/ai.js along with app.js and styles.css. The folder must stay as api/ai.js so Vercel treats it as a serverless function.
+In Vercel, add the environment variable ANTHROPIC_API_KEY. Without it, the app uses the labelled fallback, which the exam allows. Never put the key in the repo.
+Check that the model name claude-haiku-5-5 is correct for your account. If the AI call fails, the app falls back and nothing breaks.
+Next
+
+Run both scenarios on the live site and take screenshots for D5. I can then help with the report sections, such as D6 using the prompts in api/ai.js.
+
+I am NOT allowed to use any API keys
+
+Understood. I’ll remove the API entirely so the app has no keys, no /api function, and no network calls. The feedback will run on local rules in the browser, and the app will label it honestly as rule-based rather than AI.
+
+Now I’ll update DESIGN.md so it matches (section 9 and the tools line).
+
+The app no longer uses any API keys. I deleted api/ai.js, so there is no serverless function and no key to set in Vercel. The app makes no network calls at all.
+
+Feedback: all feedback now runs as plain JavaScript rules in the browser. The failed-experiment coach and the Task 5 explanation feedback still work as before, with a “Rule-based feedback” label on screen. I re-tested both after the change and they behave correctly.
+About screen and DESIGN.md: both now say the feedback is rule-based with no external services. I did this deliberately, so the app doesn’t claim “AI feedback” for something that isn’t.
+What to upload: index.html, styles.css, app.js and DESIGN.md. There is no api folder anymore. If you already uploaded api/ai.js to GitHub, delete it there.
+
+For the report (D6): the exam asks for an AI functionality specification. Since the running app uses no AI, describe it as it is. The in-app feedback is rule-based, with the keyword rules, labels and fallback listed in DESIGN.md section 9. AI was used at design time, to help draft the content, misconceptions and feedback text, and every such chat goes in your AI-use log. I’d check with your instructor that this is acceptable for D6, since the brief expects AI features. I can also list the exact rules for the report if you want.
+
+why am I not able to access the graph?
+
+Most likely the Continue to the graph button is disabled because the length step needs two things first: pressing “Check my prediction”, then running a trial at exactly the target length (L = 4 m for the guided path, 0.25 m for the challenge path). The button gives no hint about that. There’s also a real bug: if you used the “re-run changing only one variable” lock in the mass step, it stays active and locks the length slider, so you can’t set L. I’m fixing both.
+
+I fixed the problem. Two things were blocking the graph.
+
+Stuck lock (bug): the “re-run changing only one variable” lock from the mass step carried over into the length step. It disabled the length slider, so you couldn’t reach the length the step needs. The lock now clears whenever you change steps.
+Silent disabled button: the Continue button stayed grey with no explanation. It now shows what’s missing:
+If you haven’t predicted yet: “enter a prediction and press ‘Check my prediction’”.
+If you haven’t run the trial yet: “set the length slider to exactly 4 m and press Release”.
+
+I tested it in the browser. Carrying a lock into the length step no longer disables the slider, and Continue unlocks once you run the trial at the target length.
+
+To get to the graph from the length step:
+
+Type a prediction and press Check my prediction.
+Set the length slider to the length shown (4 m guided, 0.25 m challenge path).
+Press Release & time 10 swings.
+Continue to the graph is then enabled.
+
+Re-upload the updated app.js to GitHub so the live site gets the fix. If it still doesn’t work for you, tell me which step you’re on and what the page says under the button.
+
+Go through the entire website considering all possibilities and all interactive buttons and etc. Rectify any bug that you encounter
+
+I’ll read through the whole file first, then test every path in the browser.
+
+I found a dozen real bugs in the app, covering saved state, the progress bar, the hint button, keyword rules and the pendulum canvas. I’m fixing them all in one pass and then testing each path.
+
+My first edit dropped the let state declaration, so I’m adding it back.
+
+Now a thorough browser test. First: an old-format saved state, the About overlay, and the Welcome screen chrome.
+
+I returned the wrong variable, so the results were lost. Rerunning.
+
+That all works. One small thing: the progress bar still shows on the About screen. I’ll fix that, then run the full guided-path stress test.
+
+The guided path passes all checks; the one “MISSING #lockBtn” line came from my own test script, where that button is correctly absent. Next I’ll test the challenge path, pause/resume, reload mid-step, and the hard variant.
+
+Both paths pass. Last check: the worst-case pendulum drawing (4 m, 80°) at phone width, and the graph screen.
+
+The worst case fits the canvas, and 360 px width has no overflow. Resetting the viewport.
+
+I read the whole app, fixed the bugs I found, and re-tested every path. I ran scripted clicks through the guided path, the challenge path, pause and resume, reloading mid-step, and bad inputs. All passed with no console errors. At 360 px width there is no overflow, and the pendulum fits its canvas even at 4 m and 80°. I tested in the preview pane, not on the live Vercel site or on a real phone.
+
+Bugs fixed
+
+Could break the app or lose progress
+
+Old saved data: the first skeleton you deployed saved its progress in a different format, so loading it into the new app would have crashed. Saved state is now merged onto the defaults.
+Storage errors: if the browser blocks localStorage (some private modes), the app now still runs instead of crashing. It just can’t resume.
+About screen: opening About overwrote your saved step, and a reload while on About lost your place. About is now an overlay and never touches the saved step.
+
+Wrong behaviour
+
+Progress bar: it showed on the Welcome and About screens, because the CSS overrode hidden.
+Extension question: the variant could flip mid-question after a wrong answer, because it depended on your answer streak. It is now chosen once.
+M2 misconception: a wrong answer on the Moon question wrongly recorded M2. Now only “shorten by 1%” on the clock question does.
+Explanation checker: “the period is approximately 2 seconds” was marked correct, and any 25-character sentence counted as partial. It now needs the small-angle idea, and gibberish is marked “other”.
+Blank g in the graph step: an empty or invalid value was marked wrong. It is now ignored.
+
+Smaller issues
+
+Pressing Hint wiped your typed prediction and g answer. Both are now saved as you type.
+The third hint sometimes showed as an empty 💡 bubble.
+Choosing option d on the first question got feedback that didn’t fit it, and several wrong answers on the Moon question had no specific feedback. Both now do.
+The pendulum was clipped at 4 m and large angles.
+“Get feedback” on an empty answer did nothing. It now tells you to write something first.
+The “needs 2 or more variables changed” message lists three variables properly.
+Worth knowing
+Graph screen: it plots the ideal curve at 10°, not your own trials. I think that’s fine for the exam.
+No Back button: there is no way to go back to an earlier step. Pause and resume works, but a step can’t be redone. I can add one.
+Timing noise: it adds ±1%, so the “60° is about 7% longer” figure can show as 6 to 9% on screen.
+
+Re-upload app.js and styles.css. Nothing else changed.
+
+Add a going back button as well.
+
+My test counted one back-step too many and landed on the diagnostic, which has no Next button. I’m fixing the test and rerunning.
+
+Here is the flow as Meera, the learner, experiences it. It’s written so you can say it aloud in the viva.
+
+The setup
+
+Meera is 16, a Class 11 Olympiad aspirant. She knows T = 2π√(L/g) as a formula but has never tested it. She has about 10 minutes between study blocks. The app is a short inquiry lab, not a worksheet. A 10:00 countdown timer (the C4 constraint) is at the top of every step. It only runs while she is working, so “Save & pause” really pauses it. Her progress is saved on every action, so she can stop and resume exactly where she left off.
+
+Step by step
+
+Welcome. One sentence of framing: “Does the heavy one swing faster?” and the rule of the game: change only one thing at a time. She presses Start.
+
+Step 1: Predict first (diagnostic). She is asked which of two bobs, 1 kg or 3 kg, has the shorter period. This question does two jobs:
+
+Profile adaptivity: if she answers correctly (“same”), she is offered the challenge path and skips the guided mass test. If she picks a heavy-or-light answer (misconception M1), she goes to the guided test.
+It starts the misconception log.
+
+Step 2: Does mass matter? (guided path only). She writes a hypothesis first, then uses the lab:
+
+She runs trials with sliders for length, mass and amplitude. Each trial records a timed 10-swing measurement.
+The P5 design challenge happens here. If she changes two things at once, the app says “Not a fair test”, names the variables she changed, and asks a guiding question. It does not give the answer. She can choose “Re-run, changing only one variable”, which locks the other sliders.
+With a fair test (three masses, same length and angle) she sees almost equal periods. She then revises her own hypothesis. The app never tells her the answer.
+
+Step 3: Length. She predicts the period at a new length (4 m on the guided path, 0.25 m on the challenge path), then tests it.
+
+If she predicts 8 s, she shows misconception M2 (“T is proportional to L”). The lab result contradicts her, and she is pointed to the next step.
+
+Graph. Two graphs: T vs L (curved) and T² vs L (straight). She identifies the straight-line one, then finds g from the slope (about 9.8). So M2 gets corrected by her own reasoning about the graphs.
+
+Step 4: Amplitude. She must try both a small angle and a large angle before she can answer. She then explains in her own words why the period differs at large angles. The feedback checks for the small-angle idea (sin θ ≈ θ). A vague answer gets a guiding question, and she can try again.
+
+Step 5: Olympiad challenge. A transfer problem:
+
+Guided path: a clock runs 1% slow, so how much should you shorten the length?
+Harder variant for the challenge path, or after two correct answers in a row: the clock goes to the Moon, where gravity is one-sixth. A wrong answer gets targeted feedback.
+
+Summary. It shows which of the three outcomes she met and which misconceptions came up. Pressing “Start again” restarts the session.
+
+Features to point out to your professor
+Adaptivity on profile and performance (the rubric asks for at least 2 of 3):
+Profile: the diagnostic decides guided or challenge.
+Performance: misconception-matching answers trigger targeted feedback, and two correct in a row unlocks the harder variant.
+Interaction: hints are logged, and three hint requests on one task show a worked example.
+Learning from failure without revealing the answer: the “Not a fair test” coach.
+Constraint C4: the live timer, pause and resume, a Back button, and a short sequence.
+Identity: your roll number in the footer of every screen and on the About screen.
+Be upfront about
+The feedback is rule-based, not AI-generated at runtime. You’re not allowed API keys, so the app uses keyword rules and prewritten feedback. AI was used at design time to help draft the content and rules, and that goes in your AI-use log.
+The graph screen plots the ideal curve, not the learner’s own trial data. The lab itself uses a real simulation (the exact large-angle period) with ±1% timing noise.
+
+Do you want this as a one-page script for the viva?
+
+I’ve updated ET617_Report_23B2144.docx. It validates, and it renders as 18 pages in Word. Your copy from before my edits is saved in my scratch folder, outside your project, in case you want to undo anything.
+
+What I changed
+
+GitHub link: removed the trailing .git, in both the cover table and D4. It now reads https://github.com/Aditya-A-Gupta/et617-endsem-23B2144.
+AI chat link line: restored under “AI tool and chat links” as a yellow-highlighted placeholder, since only you can supply the link.
+Prompt log: added row 15 (“Give me the report in docx format”) and row 16 (this update request), so the log is complete in order.
+
+One extra repair: your copy had lost the page number’s right-alignment in the footer (“…Break the RulePage 17 of 18”), and the page margin was missing an attribute the validator wants. Both look like side effects of re-saving the file. I restored them, so the footer is right-aligned again as before.
+
+What you still need to do
+
+Replace the yellow placeholder with your Claude chat share link, or attach an exported transcript.
+Confirm the live site at et617-23b2144.vercel.app runs the same code as the screenshots.
+Check that the repo is public or shared with the course account.
+Save the report as a single PDF for Moodle, and upload the exam-card screenshot separately.
