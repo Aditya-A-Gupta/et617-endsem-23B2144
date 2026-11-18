@@ -21,7 +21,9 @@ function period(L, thDeg) {
 const defaultState = () => ({
   screen: "welcome",
   startedAt: null,
-  path: null,                  // "guided" | "challenge"
+  elapsed: 0,                  // seconds of active learning time used (the 10-minute timer)
+  timeNoticeDismissed: false,
+  path: null,                 // "guided" | "challenge"
   misconceptions: [],          // "M1", "M2"
   diagnostic: { choice: null, correct: null },
   lab: { L: 1, m: 1, th: 20, trials: [], lock: null },
@@ -78,9 +80,38 @@ function updateChrome() {
   if (inFlow) {
     $fill.style.width = (i / (STEPS.length - 1)) * 100 + "%";
     const left = Math.max(1, Math.round(TOTAL_MIN * (1 - i / STEPS.length)));
-    $time.textContent = `Step ${i + 1} of ${STEPS.length} · about ${left} min left`;
+    $time.textContent = `Step ${i + 1} of ${STEPS.length}`;
+    updateTimer();
   }
 }
+
+// ---------- 10-minute timer (counts only while the learner is actively in a step) ----------
+const SESSION_SECS = TOTAL_MIN * 60;
+function fmt(s) { return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }
+function updateTimer() {
+  const el = $("timer"); if (!el) return;
+  const left = SESSION_SECS - (state.elapsed || 0);
+  el.textContent = left >= 0 ? fmt(left) : "+" + fmt(-left);
+  el.classList.toggle("low", left <= 60 && left >= 0);
+  el.classList.toggle("over", left < 0);
+}
+function bannerHTML() {
+  if (!(state.elapsed >= SESSION_SECS) || state.timeNoticeDismissed) return "";
+  return `<div class="feedback try" id="timeBanner"><strong>Your 10 minutes are up.</strong> Nice work. You can wrap up now, or keep going and finish this sequence.
+    <div class="row"><button class="btn small" id="toSummaryBtn">See my summary</button><button class="btn small secondary" id="keepGoingBtn">Keep going</button></div></div>`;
+}
+function bindBanner() {
+  on("toSummaryBtn", () => { state.timeNoticeDismissed = true; go("summary"); });
+  on("keepGoingBtn", () => { state.timeNoticeDismissed = true; save(); const b = $("timeBanner"); if (b) b.remove(); });
+}
+setInterval(() => {
+  if (!STEPS.includes(state.screen) || showAbout || document.hidden) return;
+  state.elapsed = (state.elapsed || 0) + 1;
+  save(); updateTimer();
+  if (state.elapsed === SESSION_SECS && !state.timeNoticeDismissed && state.screen !== "summary") {
+    $app.insertAdjacentHTML("afterbegin", bannerHTML()); bindBanner();
+  }
+}, 1000);
 
 // ---------- Feedback engine (rule-based, runs fully in the browser: no API keys, no network) ----------
 async function aiCall(kind, payload, rules) {
@@ -484,9 +515,11 @@ function render() {
   cancelAnimationFrame(anim);
   const backRow = !showAbout && STEPS.includes(state.screen)
     ? `<div class="backrow"><button class="btn small secondary" id="prevBtn">← Back</button></div>` : "";
-  $app.innerHTML = backRow + (showAbout ? screens.about() : screens[state.screen]());
+  const banner = !showAbout && STEPS.includes(state.screen) && state.screen !== "summary" ? bannerHTML() : "";
+  $app.innerHTML = banner + backRow + (showAbout ? screens.about() : screens[state.screen]());
   updateChrome();
   bind();
+  bindBanner();
 }
 
 function bind() {
