@@ -83,3 +83,6 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
 
 [hidden]{display:none !important}
 .backrow{margin:-6px 0 10px}
+.timer{font-family:ui-monospace,Consolas,monospace; font-weight:700; font-size:1.05rem; background:var(--ink); color:#fff; padding:3px 9px; border-radius:8px; min-width:62px; text-align:center}
+.timer.low{background:var(--accent)}
+.timer.over{background:#a61e4d}
