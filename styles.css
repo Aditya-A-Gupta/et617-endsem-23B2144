@@ -80,3 +80,6 @@ input[type=number]{max-width:140px}
 ul.plain{list-style:none; padding-left:0}
 ul.plain li{margin:6px 0}
 button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--accent); outline-offset:2px}
+
+[hidden]{display:none !important}
+.backrow{margin:-6px 0 10px}
