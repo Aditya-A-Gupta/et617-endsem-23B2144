@@ -36,11 +36,27 @@ const defaultState = () => ({
   log: []
 });
 
-let state = load() || defaultState();
+let state = defaultState();   // replaced by the merged saved state at the bottom of this file
+
+// Merge a saved state onto the defaults so older/partial saves never crash the app
+function mergeState(saved) {
+  const d = defaultState();
+  if (!saved || typeof saved !== "object") return d;
+  for (const k of Object.keys(d)) {
+    if (saved[k] === undefined) continue;
+    const isObj = d[k] && typeof d[k] === "object" && !Array.isArray(d[k]);
+    d[k] = isObj && saved[k] && typeof saved[k] === "object" ? { ...d[k], ...saved[k] } : saved[k];
+  }
+  if (saved.resumeTo) d.resumeTo = saved.resumeTo;
+  if (!Array.isArray(d.lab.trials)) d.lab.trials = [];
+  if (!screens[d.screen]) d.screen = "welcome";
+  return d;
+}
 function load() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { return null; } }
-function save() { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); }
+function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch { /* storage unavailable: app still works, just can't resume */ } }
 function log(ev, data) { state.log.push({ t: Date.now(), screen: state.screen, ev, data }); }
-function go(screen) { state.screen = screen; log("go", screen); save(); render(); window.scrollTo(0, 0); }
+let showAbout = false;       // About is an overlay view, so it never overwrites the saved screen
+function go(screen) { showAbout = false; state.screen = screen; state.lab.lock = null; state.lab.coach = null; log("go", screen); save(); render(); window.scrollTo(0, 0); }
 function nextStep() { const i = STEPS.indexOf(state.screen); go(STEPS[i + 1]); }
 function bump(ok) { state.streak = ok ? state.streak + 1 : 0; }
 function addM(m) { if (!state.misconceptions.includes(m)) state.misconceptions.push(m); }
@@ -56,7 +72,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;
 
 function updateChrome() {
   const i = STEPS.indexOf(state.screen);
-  const inFlow = i >= 0;
+  const inFlow = i >= 0 && !showAbout;
   $progressWrap.hidden = !inFlow;
   $pause.hidden = !inFlow;
   if (inFlow) {
@@ -74,14 +90,17 @@ const tag = () => `<span class="tag">Rule-based feedback</span>`;
 
 // Rule-based feedback rules
 function coachFallback(p) {
-  return { text: `You changed ${p.changed.length} things (${p.changed.join(" and ")}) between these two trials. Which one caused the new period? Try changing only one.` };
+  const list = p.changed.length > 2 ? p.changed.slice(0, -1).join(", ") + " and " + p.changed.slice(-1) : p.changed.join(" and ");
+  return { text: `You changed ${p.changed.length} things (${list}) between these two trials. Which one caused the new period? Try changing only one.` };
 }
 function explainFallback(p) {
   const t = p.text.toLowerCase();
-  const hasApprox = /small[- ]angle|approximat|sin ?\(?(theta|θ)|sinθ|sin theta|θ ?≈ ?sin/.test(t);
-  const hasLarge = /large|big|60|higher|bigger|wider/.test(t);
+  const hasApprox = /small[- ]?(angle|amplitude|θ|theta)/.test(t)
+    || /sin\s*\(?\s*(θ|theta)/.test(t)
+    || (/approximat/.test(t) && /(angle|θ|theta|sin|amplitude)/.test(t));
+  const hasLarge = /(large|big|60|higher|bigger|wider|angle|amplitude|swing)/.test(t);
   if (hasApprox) return { label: "correct", feedback: "Exactly. The formula assumes sin θ ≈ θ, so it is safe only for small angles. At 60° the restoring force is weaker than that approximation, so the period is longer." };
-  if (hasLarge || t.length > 25) return { label: "partial", feedback: "You noticed the period changes with amplitude. What approximation did we use to get T = 2π√(L/g)? Compare sin θ with θ at 60°." };
+  if (hasLarge) return { label: "partial", feedback: "You noticed the period changes with amplitude. What approximation did we use to get T = 2π√(L/g)? Compare sin θ with θ at 60°." };
   return { label: "other", feedback: "Look at your two trials again. Same length and mass, only the angle changed. What does that tell you about when the formula is valid?" };
 }
 
@@ -90,7 +109,7 @@ function explainFallback(p) {
 // ---------- Hints (adaptive: 3 requests -> worked example) ----------
 function hintBox(key, hints, worked) {
   const n = state.hints[key] || 0;
-  const shown = hints.slice(0, Math.min(n, hints.length)).map(h => `<div class="callout">💡 ${h}</div>`).join("");
+  const shown = hints.filter(Boolean).slice(0, n).map(h => `<div class="callout">💡 ${h}</div>`).join("");
   const wk = n >= 3 ? `<div class="feedback try"><strong>Worked example.</strong> ${worked}</div>` : "";
   return `<div class="hintbox">${shown}${wk}<button class="btn small secondary" data-hint="${key}">${n ? "Another hint" : "Hint"}</button></div>`;
 }
@@ -146,7 +165,7 @@ function drawPend(ang) {
   const L = state.lab;
   const w = cv.width, h = cv.height;
   ctx.clearRect(0, 0, w, h);
-  const px = 40 * L.L + 30;                  // string length in px
+  const px = 28 * L.L + 25;                  // string length in px (fits canvas at 4 m and 80°)
   const ox = w / 2, oy = 14;
   const bx = ox + px * Math.sin(ang), by = oy + px * Math.cos(ang);
   ctx.strokeStyle = "#bbb"; ctx.beginPath(); ctx.moveTo(ox - 40, oy); ctx.lineTo(ox + 40, oy); ctx.stroke();
@@ -247,6 +266,7 @@ const screens = {
     const opts = [["a", "The 1 kg bob"], ["b", "The 3 kg bob"], ["c", "Both have the same period"], ["d", "It depends on the amplitude only"]];
     let fb = "";
     if (d.correct === true) fb = `<div class="feedback ok"><strong>Right.</strong> Gravity pulls harder on the heavy bob, but it is also harder to accelerate, and the two cancel. You can skip the guided mass test and take the <strong>challenge path</strong>.</div>`;
+    else if (d.correct === false && d.choice === "d") fb = `<div class="feedback try"><strong>Amplitude can matter a little, but both bobs start from the same angle here.</strong> So the only difference is the mass. Does it change the period? Let us test it in the lab.</div>`;
     else if (d.correct === false) fb = `<div class="feedback try"><strong>Many people expect that!</strong> Gravity pulls harder on the heavy bob, but it is also harder to accelerate. Do these cancel? Let us test it in the lab.</div>`;
     return `
       ${pageHeading("Step 1 · Predict first")}
@@ -306,7 +326,7 @@ const screens = {
     const capped = n + " m";
     let fb = "";
     if (l.judged === "ok") fb = `<div class="feedback ok"><strong>Exactly.</strong> Length ×${n} gives period ×${Math.sqrt(n)} (T ∝ √L).</div>`;
-    if (l.judged === "m2") fb = `<div class="feedback try"><strong>That is the "T ∝ L" idea.</strong> Run the lab and compare with your prediction. What does the result say about "double length, double period"? The next step plots T² against L.</div>`;
+    if (l.judged === "m2") fb = `<div class="feedback try"><strong>That is the "T ∝ L" idea:</strong> length ×${n} would give period ×${n}. Run the lab and compare with your prediction. Does the period really change by that factor? The next step plots T² against L.</div>`;
     if (l.judged === "other") fb = `<div class="feedback try">Not quite. Use the given T = 2.0 s at L = 1 m, and run the lab to see what really happens.</div>`;
     const ranTrial = stepTrials("length").find(t => Math.abs(t.L - target) < 0.01);
     return `
@@ -322,6 +342,8 @@ const screens = {
       ${ranTrial ? `<div class="feedback ok">Lab result: T = <strong>${ranTrial.T.toFixed(2)} s</strong> at L = ${ranTrial.L} m. Your prediction was ${esc(l.pred)} s.</div>` : ""}
       ${hintBox("length", ["Try doubling the length: does the period double?", "Think of T = 2π√(L/g): what happens to T if L is multiplied by 4?", ""],
         `T ∝ √L. Length ×${n} makes the period ×√${n} = ×${Math.sqrt(n)}, so T ≈ ${correct.toFixed(1)} s.`)}
+      ${!l.judged ? `<p class="muted small">To continue: enter a prediction and press "Check my prediction".</p>`
+        : !ranTrial ? `<p class="muted small">To continue: set the length slider to exactly <strong>${capped}</strong> and press Release.</p>` : ""}
       ${nextBtn("Continue to the graph", l.judged && ranTrial)}`;
   },
 
@@ -391,11 +413,16 @@ const screens = {
 
   extension() {
     const e = state.extension;
-    const hard = state.path === "challenge" || state.streak >= 2;
+    // Decide the variant once, so it cannot flip mid-question when the streak changes
+    if (e.hard === undefined) e.hard = state.path === "challenge" || state.streak >= 2;
+    const hard = e.hard;
     const q = hard
       ? { text: "A pendulum clock keeps correct time on Earth. It is taken to the Moon, where g is 1/6 as large. To keep the same period there, what must you do to the length?",
           opts: [["a", "Keep the same length"], ["b", "Multiply the length by 1/6"], ["c", "Multiply the length by 1/√6"], ["d", "Multiply the length by 6"]],
-          ans: "b", wrongHint: { c: "T depends on √(L/g). To keep T the same you need L/g constant. g is divided by 6, so L must be divided by 6, not by √6." },
+          ans: "b", wrongHint: {
+            a: "g is smaller on the Moon, so with the same length the period would get longer. What must you do to L/g to keep T the same?",
+            c: "T depends on √(L/g). To keep T the same you need L/g constant. g is divided by 6, so L must be divided by 6, not by √6.",
+            d: "A longer string makes the period longer, and the Moon's weaker gravity already makes it longer. You need to move L the other way." },
           explain: "T = 2π√(L/g). For the same T, L/g must stay constant, so if g → g/6 then L → L/6." }
       : { text: "A pendulum clock runs 1% slow because its period is 1% too long. By about how much should you shorten the length?",
           opts: [["a", "1%"], ["b", "2%"], ["c", "4%"], ["d", "0.5%"]],
@@ -453,11 +480,11 @@ const screens = {
 };
 
 // ---------- Render and events ----------
-let prevScreen = "welcome";
-
 function render() {
   cancelAnimationFrame(anim);
-  $app.innerHTML = screens[state.screen]();
+  const backRow = !showAbout && STEPS.includes(state.screen)
+    ? `<div class="backrow"><button class="btn small secondary" id="prevBtn">← Back</button></div>` : "";
+  $app.innerHTML = backRow + (showAbout ? screens.about() : screens[state.screen]());
   updateChrome();
   bind();
 }
@@ -466,10 +493,17 @@ function bind() {
   on("startBtn", () => { state = defaultState(); state.startedAt = Date.now(); go("diagnostic"); });
   on("resumeBtn", () => { const t = state.resumeTo; state.resumeTo = null; go(t); });
   on("restartBtn", () => { state = defaultState(); go("welcome"); });
-  on("backBtn", () => go(prevScreen));
+  on("backBtn", () => { showAbout = false; render(); window.scrollTo(0, 0); });
   on("toChallenge", () => { state.path = "challenge"; state.results.o2 = true; go("length"); });
   on("toMass", () => { state.path = "guided"; go("mass"); });
   on("nextBtn", () => nextStep());
+  on("prevBtn", () => {
+    const i = STEPS.indexOf(state.screen);
+    if (i <= 0) { state.resumeTo = state.screen; state.screen = "welcome"; state.lab.lock = null; state.lab.coach = null; save(); render(); return; }
+    let target = STEPS[i - 1];
+    if (target === "mass" && state.path === "challenge") target = "diagnostic";   // challenge path skips the mass step
+    go(target);
+  });
 
   // diagnostic options
   document.querySelectorAll(".option[data-k]").forEach(b => {
@@ -508,6 +542,8 @@ function bind() {
   bindHints();
 
   if (s === "length") {
+    const pi = $("pred");
+    if (pi) pi.oninput = () => { state.length.pred = pi.value; save(); };   // keep typed text if the page re-renders (e.g. Hint)
     on("checkPred", () => {
       const v = parseFloat($("pred").value);
       if (isNaN(v)) return;
@@ -522,8 +558,11 @@ function bind() {
 
   if (s === "graph") {
     drawGraphs();
+    const gi = $("gin");
+    if (gi) gi.oninput = () => { state.graph.q2 = gi.value; save(); };
     on("checkG", () => {
       const v = parseFloat($("gin").value);
+      if (isNaN(v)) return;
       state.graph.q2 = String(v);
       state.graph.q2ok = !isNaN(v) && v >= 9.4 && v <= 10.2;
       bump(state.graph.q2ok); save(); render();
@@ -535,7 +574,7 @@ function bind() {
     if (ta) ta.oninput = () => { state.amplitude.text = ta.value; save(); };
     on("checkExpl", async () => {
       const text = $("expl").value.trim();
-      if (text.length < 5) return;
+      if (text.length < 5) { $("explFb").innerHTML = `<div class="feedback try">Write a sentence or two first, then press Get feedback.</div>`; return; }
       state.amplitude.text = text;
       $("explFb").innerHTML = `<div class="feedback try">Reading your explanation…</div>`;
       const r = await aiCall("explain", { text }, explainFallback);
@@ -550,7 +589,7 @@ function bind() {
       b.onclick = () => {
         const [k, ans] = b.dataset.ext.split(":");
         state.extension.choice = k; state.extension.correct = k === ans;
-        if (k !== ans && state.misconceptions.includes("M2") === false && !(state.path === "challenge")) addM("M2");
+        if (k === "a" && !state.extension.hard) addM("M2");   // "1% slow -> shorten by 1%" is the T ∝ L idea
         bump(k === ans); save(); render();
       };
     });
@@ -578,16 +617,17 @@ function drawGraphs() {
 
 $("aboutLink").onclick = e => {
   e.preventDefault();
-  if (state.screen !== "about") prevScreen = state.screen;
-  go("about");
+  showAbout = true; render(); window.scrollTo(0, 0);
 };
 
 $pause.onclick = () => {
   state.resumeTo = state.screen;
   state.screen = "welcome";
+  state.lab.lock = null; state.lab.coach = null;
   save(); render();
 };
 
+state = mergeState(load());
 if (state.startedAt && STEPS.includes(state.screen)) {
   state.resumeTo = state.screen;
   state.screen = "welcome";
