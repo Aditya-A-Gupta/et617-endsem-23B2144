@@ -7,6 +7,17 @@ const TOTAL_MIN = 10;
 const G = 9.8;
 const STEPS = ["diagnostic", "mass", "length", "graph", "amplitude", "extension", "summary"];
 
+// MISSION: walk from the Workshop (start) to the Clock Tower (end). Each learning step is a station on the route.
+const STATIONS = [
+  { id: "diagnostic", name: "The Workshop", short: "Start" },
+  { id: "mass", name: "Mass Bench", short: "Mass" },
+  { id: "length", name: "Length Bridge", short: "Length" },
+  { id: "graph", name: "Calibration Hut", short: "Graph" },
+  { id: "amplitude", name: "Windy Ridge", short: "Angle" },
+  { id: "extension", name: "The Clock Tower", short: "Tower" },
+];
+const TOWER_TOL = 0.03;       // the clock "keeps time" when the period is within this many seconds of the target
+
 // ---------- Physics ----------
 // Exact period: T = T0 / AGM(1, cos(theta0/2)), T0 = 2*pi*sqrt(L/g)
 function period(L, thDeg) {
@@ -31,7 +42,7 @@ const defaultState = () => ({
   length: { pred: "", judged: null, ran: false, n: null },
   graph: { q1: null, q2: "", q2ok: null },
   amplitude: { text: "", result: null },
-  extension: { choice: null, correct: null },
+  extension: { choice: null, correct: null, solved: false, init: false },   // solved = the Clock Tower mission task
   hints: {},
   streak: 0,
   results: {},                 // outcomes: o1, o2, o3
@@ -155,19 +166,23 @@ function labHTML(step) {
   const L = state.lab;
   const lock = L.lock;
   const dis = (name) => (lock && lock.free !== name ? "disabled" : "");
+  const tower = step === "extension";
+  // Clock Tower needs a fine length control; the stations use the coarse 0.25 m steps
+  const rng = tower ? { min: 0.1, max: 2.5, step: 0.01 } : { min: 0.25, max: 4, step: 0.25 };
+  if (!tower) L.L = Math.min(4, Math.max(0.25, Math.round(L.L * 4) / 4));
   return `
     <div class="card lab">
       <canvas id="pend" width="320" height="220" aria-label="Pendulum"></canvas>
       <div class="controls">
         <label>Length L: <strong id="vL">${L.L.toFixed(2)}</strong> m
-          <input type="range" id="sL" min="0.25" max="4" step="0.25" value="${L.L}" ${dis("L")}></label>
+          <input type="range" id="sL" min="${rng.min}" max="${rng.max}" step="${rng.step}" value="${L.L}" ${dis("L")}></label>
         <label>Mass m: <strong id="vm">${L.m.toFixed(1)}</strong> kg
           <input type="range" id="sm" min="0.5" max="5" step="0.5" value="${L.m}" ${dis("m")}></label>
         <label>Amplitude θ: <strong id="vth">${L.th}</strong>°
           <input type="range" id="sth" min="5" max="80" step="5" value="${L.th}" ${dis("th")}></label>
       </div>
       <div class="row">
-        <button class="btn" id="release">Release &amp; time 10 swings</button>
+        <button class="btn" id="release">${tower ? "Release &amp; test the clock" : "Release &amp; time 10 swings"}</button>
         ${lock ? `<button class="btn secondary" id="unlock">Unlock all</button>` : ""}
       </div>
       <div id="coach">${L.coach ? `<div class="feedback try"><strong>Not a fair test.</strong> ${esc(L.coach.text)} ${tag(L.coach.source)}
@@ -245,7 +260,7 @@ function bindLab(step, onTrial) {
 
   $("release").onclick = async () => {
     const Ttrue = period(L.L, L.th);
-    const T = Ttrue * (1 + (Math.random() - 0.5) * 0.02);      // timing noise ±1%
+    const T = step === "extension" ? Ttrue : Ttrue * (1 + (Math.random() - 0.5) * 0.02);      // timing noise ±1% (none at the tower: changing several variables is allowed there)
     const trial = { step, L: L.L, m: L.m, th: L.th, T, t10: T * 10 };
     const prev = stepTrials(step).slice(-1)[0];
     L.trials.push(trial); log("trial", { L: L.L, m: L.m, th: L.th, T });
@@ -256,7 +271,7 @@ function bindLab(step, onTrial) {
     $("tableWrap").innerHTML = tableHTML(step);
     // confound detection: 2+ variables changed vs previous trial
     L.coach = null;
-    if (prev) {
+    if (prev && step !== "extension") {
       const changed = [];
       if (prev.L !== trial.L) changed.push("length");
       if (prev.m !== trial.m) changed.push("mass");
@@ -277,15 +292,41 @@ function bindLab(step, onTrial) {
 
 // ---------- Screens ----------
 function pageHeading(t, sub) { return `<h2>${t}</h2>${sub ? `<p class="muted">${sub}</p>` : ""}`; }
+function routeHTMLPreview() {
+  const n = STATIONS.length;
+  const nodes = STATIONS.map((st, i) => `<div class="node todo" style="left:${routePos(i)}"><span class="dot">${i === 0 ? "S" : i === n - 1 ? "★" : i}</span><span class="lbl">${st.short}</span></div>`).join("");
+  return `<div class="route preview" role="img" aria-label="The route from the Workshop to the Clock Tower"><div class="route-line"></div>${nodes}</div>`;
+}
+const story = (t) => `<p class="story">${t}</p>`;
+
+// Route map: shows where the learner is between the Start and the Clock Tower; the walker token moves when she moves.
+let lastRouteIdx = null;
+const routeIdx = () => Math.min(STEPS.indexOf(state.screen), STATIONS.length - 1);
+const routePos = (i) => `calc(22px + (100% - 44px) * ${i / (STATIONS.length - 1)})`;
+function routeHTML() {
+  const n = STATIONS.length, to = routeIdx();
+  const from = lastRouteIdx === null ? to : lastRouteIdx;
+  const atSummary = state.screen === "summary";
+  const nodes = STATIONS.map((st, i) => {
+    const skipped = st.id === "mass" && state.path === "challenge" && i < to;
+    const cls = skipped ? "skipped" : (i < to || (atSummary && i === to)) ? "done" : i === to ? "current" : "todo";
+    const dot = skipped ? "»" : cls === "done" ? "✓" : i === 0 ? "S" : i === n - 1 ? "★" : String(i);
+    return `<div class="node ${cls}" style="left:${routePos(i)}"><span class="dot">${dot}</span><span class="lbl">${st.short}</span></div>`;
+  }).join("");
+  return `<div class="route" role="img" aria-label="Mission route: ${STATIONS[to].name}">
+    <div class="route-line"></div><div class="route-fill" style="width:calc((100% - 44px) * ${to / (n - 1)})"></div>
+    ${nodes}<div class="walker" id="walker" style="left:${routePos(from)}">M</div></div>`;
+}
 function nextBtn(label, enabled, id = "nextBtn") { return `<div class="row"><button class="btn" id="${id}" ${enabled ? "" : "disabled"}>${label}</button></div>`; }
 
 const screens = {
   welcome() {
     const resumable = !!state.resumeTo;
     return `
-      <h1>Does the heavy one swing faster?</h1>
-      <p>Let us find out what really decides a pendulum's swing time. You will predict, test, and revise your ideas in about <strong>10 minutes</strong>.</p>
-      <div class="callout"><strong>The rule of the game:</strong> change only <em>one</em> thing at a time.</div>
+      <h1>Mission: Fix the Clock Tower</h1>
+      <p>The town clock has stopped keeping time. You are <strong>Meera</strong>. Walk from the <strong>Workshop</strong> to the <strong>Clock Tower</strong>. At every stop you will test a pendulum and learn what really decides its swing time. Then, at the tower, you must <strong>tune its pendulum so the clock keeps perfect time</strong>.</p>
+      <div class="callout"><strong>Your clock is ticking:</strong> you have <strong>10 minutes</strong>. <strong>The rule of the game:</strong> change only <em>one</em> thing at a time (until the tower, where you will need more).</div>
+      ${routeHTMLPreview()}
       <div class="row">
         <button class="btn" id="startBtn">${resumable ? "Start over" : "Start"}</button>
         ${resumable ? `<button class="btn" id="resumeBtn">Resume where I left</button>` : ""}
@@ -296,19 +337,20 @@ const screens = {
     const d = state.diagnostic;
     const opts = [["a", "The 1 kg bob"], ["b", "The 3 kg bob"], ["c", "Both have the same period"], ["d", "It depends on the amplitude only"]];
     let fb = "";
-    if (d.correct === true) fb = `<div class="feedback ok"><strong>Right.</strong> Gravity pulls harder on the heavy bob, but it is also harder to accelerate, and the two cancel. You can skip the guided mass test and take the <strong>challenge path</strong>.</div>`;
+    if (d.correct === true) fb = `<div class="feedback ok"><strong>Right.</strong> Gravity pulls harder on the heavy bob, but it is also harder to accelerate, and the two cancel. You can skip the Mass Bench and take the <strong>shortcut</strong> (the challenge path).</div>`;
     else if (d.correct === false && d.choice === "d") fb = `<div class="feedback try"><strong>Amplitude can matter a little, but both bobs start from the same angle here.</strong> So the only difference is the mass. Does it change the period? Let us test it in the lab.</div>`;
     else if (d.correct === false) fb = `<div class="feedback try"><strong>Many people expect that!</strong> Gravity pulls harder on the heavy bob, but it is also harder to accelerate. Do these cancel? Let us test it in the lab.</div>`;
     return `
-      ${pageHeading("Step 1 · Predict first")}
+      ${pageHeading("Start · The Workshop", "Task 1: predict first")}
+      ${story("Mission start. Before you set out, the clockmaker asks you one question.")}
       <div class="card">
         <p>A 1 kg bob and a 3 kg bob hang from identical 1 m strings and are released from the same angle. Which one has the <strong>shorter period</strong>?</p>
         <div class="options">${opts.map(([k, t]) => `<button class="option ${d.choice === k ? "selected" : ""}" data-k="${k}" ${d.correct !== null ? "disabled" : ""}>${t}</button>`).join("")}</div>
         ${fb}
       </div>
       <div class="row">
-        ${d.correct === true ? `<button class="btn" id="toChallenge">Take the challenge path</button>` : ""}
-        ${d.correct === false ? `<button class="btn" id="toMass">Test it in the lab</button>` : ""}
+        ${d.correct === true ? `<button class="btn" id="toChallenge">Take the shortcut to the Length Bridge →</button>` : ""}
+        ${d.correct === false ? `<button class="btn" id="toMass">Walk to the Mass Bench →</button>` : ""}
       </div>`;
   },
 
@@ -335,7 +377,8 @@ const screens = {
       result = `<div class="feedback try"><strong>Not a fair test yet.</strong> To compare masses you need the same length and amplitude each time. Use the lock button, or keep L and θ fixed, and try at least 3 different masses.</div>`;
     }
     return `
-      ${pageHeading("Step 2 · Does mass matter?", "Guided experiment for Task 2")}
+      ${pageHeading("Station 1 · Mass Bench", "Task 2: does mass matter?")}
+      ${story("A guard on the road says heavy bobs swing slower. Settle it at the bench.")}
       <div class="card">
         <p><strong>First, your hypothesis:</strong> what will happen to the period if you use a heavier bob?</p>
         <div class="options">${radios("mass.hyp", m.hyp)}</div>
@@ -345,7 +388,7 @@ const screens = {
       ${result}
       ${hintBox("mass", ["Keep length and amplitude the same each time.", "Compare the T column. Is the difference larger than timing error?", "Look at the three T values: they are almost equal."],
         "Set L = 1 m and θ = 20°. Run m = 0.5, 2 and 5 kg. All three periods are ≈ 2.0 s, so mass does not change the period.")}
-      ${nextBtn("Continue to Step 3 · Length", m.revised === "none")}`;
+      ${nextBtn("Walk to the Length Bridge →", m.revised === "none")}`;
   },
 
   length() {
@@ -361,7 +404,8 @@ const screens = {
     if (l.judged === "other") fb = `<div class="feedback try">Not quite. Use the given T = 2.0 s at L = 1 m, and run the lab to see what really happens.</div>`;
     const ranTrial = stepTrials("length").find(t => Math.abs(t.L - target) < 0.01);
     return `
-      ${pageHeading("Step 3 · Length", "Task 3: predict, then test")}
+      ${pageHeading("Station 2 · Length Bridge", "Task 3: predict, then test")}
+      ${story("The bridge only opens if you can predict how a longer or shorter pendulum swings.")}
       <div class="card">
         <p>At <span class="mono">L = 1 m</span> the period is about <strong>2.0 s</strong>. What will the period be at <span class="mono">L = ${n} m</span> (same mass and amplitude)?</p>
         <label>Your prediction (s): <input type="number" step="0.1" id="pred" value="${esc(l.pred)}" ${l.judged ? "disabled" : ""}></label>
@@ -375,7 +419,7 @@ const screens = {
         `T ∝ √L. Length ×${n} makes the period ×√${n} = ×${Math.sqrt(n)}, so T ≈ ${correct.toFixed(1)} s.`)}
       ${!l.judged ? `<p class="muted small">To continue: enter a prediction and press "Check my prediction".</p>`
         : !ranTrial ? `<p class="muted small">To continue: set the length slider to exactly <strong>${capped}</strong> and press Release.</p>` : ""}
-      ${nextBtn("Continue to the graph", l.judged && ranTrial)}`;
+      ${nextBtn("Cross to the Calibration Hut →", l.judged && ranTrial)}`;
   },
 
   graph() {
@@ -388,7 +432,8 @@ const screens = {
     if (g.q2ok === true) fb2 = `<div class="feedback ok">g ≈ 9.8 m/s². You just measured gravity with a string.</div>`;
     else if (g.q2ok === false) fb2 = `<div class="feedback try">Slope = 4π²/g. Rearrange for g and try again.</div>`;
     return `
-      ${pageHeading("Graph analysis", "Task 4: read the straight line")}
+      ${pageHeading("Station 3 · Calibration Hut", "Task 4: read the straight line")}
+      ${story("The hut keeper's logbook holds two graphs. Read the right one to get the key to the ridge.")}
       <div class="card">
         <div class="graphs"><div><canvas id="g1" width="300" height="200"></canvas><p class="small center">T vs L</p></div>
         <div><canvas id="g2" width="300" height="200"></canvas><p class="small center">T² vs L</p></div></div>
@@ -408,7 +453,7 @@ const screens = {
       </div>` : ""}
       ${hintBox("graph", ["Which graph is a straight line through the origin?", "T² = (4π²/g) L, so slope = 4π²/g.", "g = 4π² / slope."],
         `g = 4π² / ${slope} = 39.48 / ${slope} ≈ 9.8 m/s².`)}
-      ${nextBtn("Continue to amplitude", g.q1 === "T2" && g.q2ok === true)}`;
+      ${nextBtn("Climb to Windy Ridge →", g.q1 === "T2" && g.q2ok === true)}`;
   },
 
   amplitude() {
@@ -425,7 +470,8 @@ const screens = {
     let fb = "";
     if (a.result) fb = `<div class="feedback ${a.result.label === "correct" ? "ok" : "try"}">${esc(a.result.feedback)} ${tag(a.result.source)}</div>`;
     return `
-      ${pageHeading("Step 4 · Amplitude challenge", "Task 5: when does the formula break?")}
+      ${pageHeading("Station 4 · Windy Ridge", "Task 5: when does the formula break?")}
+      ${story("The wind makes pendulums swing wide up here. Does the formula still hold?")}
       <div class="card">
         <p>Run one trial at a <strong>small angle (≤ 10°)</strong> and one at a <strong>large angle (≥ 45°)</strong>, changing only the amplitude.</p>
       </div>
@@ -439,38 +485,76 @@ const screens = {
       </div>
       ${hintBox("amplitude", ["The derivation replaces sin θ with θ. When is that accurate?", "Compare sin(60°) = 0.87 with 60° = 1.05 rad.", ""],
         "The restoring force is mg·sin θ. For small θ, sin θ ≈ θ gives simple harmonic motion. At 60°, sin θ is smaller than θ, so the force is weaker and T is longer (~7%). The formula is safe up to roughly 15°.")}
-      ${nextBtn("Continue to the Olympiad challenge", !!a.result)}`;
+      ${nextBtn("Walk to the Clock Tower →", !!a.result)}`;
   },
 
   extension() {
     const e = state.extension;
-    // Decide the variant once, so it cannot flip mid-question when the streak changes
+    // Decide the variant once, so it cannot flip mid-task when the streak changes
     if (e.hard === undefined) e.hard = state.path === "challenge" || state.streak >= 2;
     const hard = e.hard;
+    if (!e.init) {                // set up the tower's out-of-tune pendulum the first time the learner arrives
+      e.init = true; e.target = hard ? 1.0 : 2.0;
+      const Lb = state.lab; Lb.L = hard ? 0.6 : 1.4; Lb.m = 3; Lb.th = 45; Lb.lock = null; Lb.coach = null;
+    }
+    const L0 = hard ? 0.6 : 1.4, T0 = period(L0, 45);
+    const tr = stepTrials("extension"), n = tr.length, lt = tr[n - 1];
+
+    // ---- the mission task: tune the pendulum ----
+    let fb = "";
+    if (e.solved) {
+      const w = tr.find(t => Math.abs(period(t.L, t.th) - e.target) <= TOWER_TOL) || lt;
+      fb = `<div class="feedback ok"><strong>Mission accomplished!</strong> The clock keeps perfect time: one swing takes <strong>${(w ? w.T : e.target).toFixed(2)} s</strong> with L = ${w ? w.L : "?"} m and θ = ${w ? w.th : "?"}°.</div>`;
+    } else if (lt) {
+      const Tt = period(lt.L, lt.th), diff = Tt - e.target;
+      let msg = `Your last test: <strong>${Tt.toFixed(2)} s</strong>. Target: <strong>${e.target.toFixed(2)} s</strong>. The clock is <strong>${diff > 0 ? "too slow" : "too fast"}</strong> by ${Math.abs(diff).toFixed(2)} s.`;
+      const prev = tr[n - 2];
+      if (lt.th > 15 && Math.abs(period(lt.L, 5) - e.target) <= TOWER_TOL) msg += `<br>Your length is right for small swings, but the swing is wide, so the period comes out longer than the simple formula says. Remember Windy Ridge.`;
+      else if (prev && prev.m !== lt.m && Math.abs(period(prev.L, prev.th) - Tt) < 1e-9) msg += `<br>You changed the mass, but the period did not move. Remember the Mass Bench.`;
+      else if (n >= 2) msg += `<br>Which variables change the period, and which do not? Use what you learned at each station.`;
+      if (n >= 3) msg += `<br>Rule of thumb: T ∝ √L, so to change the period by 10% you change the length by about 20%.`;
+      if (n >= 5) msg += `<br><strong>Worked example:</strong> for small swings L = g·T²/(4π²). Put in your target T and keep θ small.`;
+      fb = `<div class="feedback try">${msg}</div>`;
+    }
+
+    // ---- the debrief question (after the mission task is done) ----
     const q = hard
-      ? { text: "A pendulum clock keeps correct time on Earth. It is taken to the Moon, where g is 1/6 as large. To keep the same period there, what must you do to the length?",
+      ? { text: "The clockmaker asks: this clock keeps correct time on Earth. It is taken to the Moon, where g is 1/6 as large. To keep the same period there, what must you do to the length?",
           opts: [["a", "Keep the same length"], ["b", "Multiply the length by 1/6"], ["c", "Multiply the length by 1/√6"], ["d", "Multiply the length by 6"]],
           ans: "b", wrongHint: {
             a: "g is smaller on the Moon, so with the same length the period would get longer. What must you do to L/g to keep T the same?",
             c: "T depends on √(L/g). To keep T the same you need L/g constant. g is divided by 6, so L must be divided by 6, not by √6.",
             d: "A longer string makes the period longer, and the Moon's weaker gravity already makes it longer. You need to move L the other way." },
           explain: "T = 2π√(L/g). For the same T, L/g must stay constant, so if g → g/6 then L → L/6." }
-      : { text: "A pendulum clock runs 1% slow because its period is 1% too long. By about how much should you shorten the length?",
+      : { text: "The clockmaker asks: a pendulum clock runs 1% slow because its period is 1% too long. By about how much should you shorten the length?",
           opts: [["a", "1%"], ["b", "2%"], ["c", "4%"], ["d", "0.5%"]],
           ans: "b", wrongHint: { a: "That is the 'T ∝ L' idea again. Because T ∝ √L, the length must change twice as much as the period does.", c: "Check the sign and size: ΔL/L ≈ 2·ΔT/T.", d: "That would be too small a change. T ∝ √L means L changes twice as much as T." },
           explain: "T ∝ √L, so ΔT/T ≈ ½·ΔL/L. A 1% reduction in T needs about a 2% reduction in L." };
-    let fb = "";
-    if (e.correct === true) fb = `<div class="feedback ok"><strong>Correct.</strong> ${q.explain}</div>`;
-    else if (e.correct === false) fb = `<div class="feedback try">${q.wrongHint[e.choice] || "Try using T ∝ √L."}</div>`;
+    let qfb = "";
+    if (e.correct === true) qfb = `<div class="feedback ok"><strong>Correct.</strong> ${q.explain}</div>`;
+    else if (e.correct === false) qfb = `<div class="feedback try">${q.wrongHint[e.choice] || "Try using T ∝ √L."}</div>`;
+    const Lworked = (G * e.target * e.target) / (4 * Math.PI * Math.PI);
+
     return `
-      ${pageHeading("Step 5 · Olympiad challenge", hard ? "Harder variant: you earned it" : "Last task")}
+      ${pageHeading("Destination · The Clock Tower", hard ? "Final mission task (harder clock: you earned it)" : "Final mission task")}
+      ${story("You made it. The tower's pendulum is out of tune. Fix it and the town has its time back.")}
+      <div class="card">
+        <p>The tower's pendulum is currently <strong>L = ${L0.toFixed(2)} m, m = 3 kg, θ = 45°</strong>, so one full swing takes <strong>${T0.toFixed(2)} s</strong>. The clock only keeps time if one full swing takes exactly <strong>${e.target.toFixed(2)} s</strong> (within ±${TOWER_TOL.toFixed(2)} s).</p>
+        <p><strong>Your task:</strong> adjust the pendulum, then press <em>Release &amp; test the clock</em>. The length slider moves in 0.01 m steps here. You may change more than one variable this time.</p>
+      </div>
+      ${labHTML("extension")}
+      ${fb}
+      ${hintBox("tower", ["Compare your period with the target. Which way must it move?", "Which of length, mass and amplitude change the period? Which do not?", "Wide swings add extra time, and T ∝ √L."],
+        `For small swings (θ ≤ 10°): L = g·T²/(4π²) = 9.8 × ${e.target.toFixed(2)}² / 39.48 ≈ ${Lworked.toFixed(2)} m.`)}
+      ${e.solved ? `
       <div class="card">
         <p>${q.text}</p>
         <div class="options">${q.opts.map(([k, t]) => `<button class="option ${e.choice === k ? "selected" : ""}" data-ext="${k}:${q.ans}" ${e.correct === true ? "disabled" : ""}>${t}</button>`).join("")}</div>
-        ${fb}
+        ${qfb}
       </div>
-      ${hintBox("extension", ["T ∝ √L (and T ∝ 1/√g).", "Small changes: ΔT/T ≈ ½ ΔL/L.", ""], q.explain)}
-      ${nextBtn("See my summary", e.correct === true)}`;
+      ${hintBox("extension", ["T ∝ √L (and T ∝ 1/√g).", "Small changes: ΔT/T ≈ ½ ΔL/L.", ""], q.explain)}` : ""}
+      ${!e.solved ? `<p class="muted small">To continue: tune the pendulum until the clock keeps time.</p>` : e.correct !== true ? `<p class="muted small">To continue: answer the clockmaker's question.</p>` : ""}
+      ${nextBtn("Complete the mission →", e.solved && e.correct === true)}`;
   },
 
   summary() {
@@ -478,10 +562,15 @@ const screens = {
     const m = state.misconceptions;
     const row = (ok, t) => `<li>${ok ? "✅" : "⬜"} ${t}</li>`;
     const mm = (id, txt) => `<li>${m.includes(id) ? "🔧 You met and tested: " : "—  Not triggered: "}${txt}</li>`;
+    const ex = state.extension, nT = stepTrials("extension").length;
     return `
-      <h1>Session summary</h1>
+      <h1>Mission report</h1>
       <div class="card">
-        <p>Path: <strong>${state.path === "challenge" ? "Challenge" : "Guided"}</strong> · Trials run: <strong>${state.lab.trials.length}</strong> · Hints used: <strong>${Object.values(state.hints).reduce((a, b) => a + b, 0)}</strong></p>
+        <h3>The mission</h3>
+        <ul class="plain">
+          ${row(ex.solved, ex.solved ? `Reached the Clock Tower and tuned the clock to ${ex.target.toFixed(2)} s in ${nT} test${nT === 1 ? "" : "s"}` : "Reach the Clock Tower and tune the clock")}
+        </ul>
+        <p>Route: <strong>${state.path === "challenge" ? "Shortcut (challenge path)" : "Full route"}</strong> · Trials run: <strong>${state.lab.trials.length}</strong> · Hints used: <strong>${Object.values(state.hints).reduce((a, b) => a + b, 0)}</strong></p>
         <h3>Outcomes</h3>
         <ul class="plain">
           ${row(r.o1, "Predict how the period changes with length (T ∝ √L)")}
@@ -503,6 +592,7 @@ const screens = {
       <div class="card">
         <p><strong>Identity:</strong> ${ROLL}</p>
         <p><strong>Card:</strong> P5 Inquiry-based virtual laboratory · T1 Simple pendulum: length, mass, amplitude vs period · L6 Olympiad learner · C4 10-minute sessions</p>
+        <p><strong>Mission:</strong> walk from the Workshop (start) to the Clock Tower (end), learn at four stations on the way, then tune the tower's pendulum so the clock keeps time.</p>
         <p><strong>Built with:</strong> plain HTML, CSS and JavaScript, hosted on Vercel. Feedback is generated by rules that run in your browser. No external services or API keys are used.</p>
         <p><strong>AI use:</strong> AI tools were used to help plan and write this app. The full log is in the report.</p>
       </div>
@@ -516,10 +606,21 @@ function render() {
   const backRow = !showAbout && STEPS.includes(state.screen)
     ? `<div class="backrow"><button class="btn small secondary" id="prevBtn">← Back</button></div>` : "";
   const banner = !showAbout && STEPS.includes(state.screen) && state.screen !== "summary" ? bannerHTML() : "";
-  $app.innerHTML = banner + backRow + (showAbout ? screens.about() : screens[state.screen]());
+  const route = !showAbout && STEPS.includes(state.screen) ? routeHTML() : "";
+  $app.innerHTML = banner + route + backRow + (showAbout ? screens.about() : screens[state.screen]());
   updateChrome();
   bind();
   bindBanner();
+  const walker = $("walker");               // the walker starts at the previous station and walks to the current one
+  if (walker) {
+    const to = routeIdx();
+    void walker.offsetWidth;                       // force layout so the browser sees the start position, then slide to the new one
+    walker.style.left = routePos(to);
+    const snap = () => { const w = $("walker"); if (!w) return; w.style.transition = "none"; w.style.left = routePos(routeIdx()); void w.offsetWidth; w.style.transition = ""; };
+    if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) snap();   // no animation for people who ask for less motion
+    setTimeout(snap, 1100);                         // safety: if the animation was throttled, never leave the walker at an old station
+    lastRouteIdx = to;
+  }
 }
 
 function bind() {
@@ -564,12 +665,13 @@ function bind() {
   });
 
   const s = state.screen;
-  if (["mass", "length", "amplitude"].includes(s) && state.screen) {
-    const refresh = () => {};
-    bindLab(s, () => {
-      // Re-render only the parts that depend on trials (keeps slider state)
-      if (s === "mass" || s === "length") { const y = window.scrollY; render(); window.scrollTo(0, y); }
-      if (s === "amplitude") { const y = window.scrollY; render(); window.scrollTo(0, y); }
+  if (["mass", "length", "amplitude", "extension"].includes(s) && state.screen) {
+    bindLab(s, (trial) => {
+      if (s === "extension") {      // the mission task: did the learner tune the clock?
+        const e = state.extension;
+        if (!e.solved && Math.abs(period(trial.L, trial.th) - e.target) <= TOWER_TOL) { e.solved = true; log("mission", { L: trial.L, th: trial.th, T: trial.T }); save(); }
+      }
+      const y = window.scrollY; render(); window.scrollTo(0, y);
     });
   }
   bindHints();
