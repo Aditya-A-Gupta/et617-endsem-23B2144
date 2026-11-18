@@ -86,3 +86,18 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
 .timer{font-family:ui-monospace,Consolas,monospace; font-weight:700; font-size:1.05rem; background:var(--ink); color:#fff; padding:3px 9px; border-radius:8px; min-width:62px; text-align:center}
 .timer.low{background:var(--accent)}
 .timer.over{background:#a61e4d}
+
+/* ---- mission route (Workshop -> Clock Tower) ---- */
+.route{position:relative; height:66px; margin:2px 0 12px}
+.route.preview{margin:14px 0 6px}
+.route-line{position:absolute; left:22px; right:22px; top:22px; height:4px; background:#e0ded6; border-radius:4px}
+.route-fill{position:absolute; left:22px; top:22px; height:4px; background:var(--accent); border-radius:4px; transition:width .8s ease}
+.node{position:absolute; top:12px; width:58px; margin-left:-29px; text-align:center}
+.dot{display:inline-flex; width:24px; height:24px; border-radius:50%; align-items:center; justify-content:center; background:#fff; border:2px solid #c9c7bf; font-size:.72rem; font-weight:700; color:var(--muted)}
+.node.done .dot{background:var(--ok); border-color:var(--ok); color:#fff}
+.node.current .dot{border-color:var(--accent); color:var(--accent)}
+.node.skipped .dot{border-style:dashed; background:#f1efe8}
+.lbl{display:block; font-size:.68rem; color:var(--muted); margin-top:3px; line-height:1.1}
+.node.current .lbl{color:var(--ink); font-weight:700}
+.walker{position:absolute; top:8px; width:32px; height:32px; margin-left:-16px; border-radius:50%; background:var(--accent); color:#fff; font-weight:700; font-size:.85rem; display:flex; align-items:center; justify-content:center; border:3px solid #fff; box-shadow:0 1px 5px rgba(0,0,0,.35); transition:left .9s ease; z-index:2}
+.story{font-style:italic; color:var(--muted); margin:.1em 0 .8em}
